@@ -2,6 +2,8 @@ package com.vin.composebootcamp
 
 import android.content.res.Configuration.UI_MODE_NIGHT_YES
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.StringRes
@@ -28,6 +30,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,7 +46,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.vin.composebootcamp.ui.theme.ComposeBootcampTheme
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,9 +67,10 @@ class MainActivity : ComponentActivity() {
 /*
     Define bottom navigation bar's 'states'
  */
-sealed class Screen(val dest: String, val title: String, @StringRes val resId: Int, val icon: ImageVector = Icons.Filled.Circle) {
+sealed class Screen(val dest: String, val title: String, @StringRes val navName: Int = R.string.nav_default, val icon: ImageVector = Icons.Filled.Circle) {
     object MainScreen: Screen("main", "Oh my god... Dog!!!", R.string.nav_home, Icons.Filled.Home)
     object DogListScreen: Screen("doglist", "Dog list", R.string.nav_doglist, Icons.Filled.Pets)
+    object DogViewScreen: Screen("dogview", "Watch and learn", R.string.nav_default, Icons.Filled.Pets)
 }
 
 @Composable
@@ -71,6 +82,8 @@ private fun MainApp() {
     )
     val navController = rememberNavController()
     var topAppBarText by remember{ mutableStateOf("Oh my god! Dog!!!") }
+
+    var dogList = remember { mutableStateListOf<Dog>() }
 
     Scaffold(
         topBar = {
@@ -87,6 +100,7 @@ private fun MainApp() {
                 navItems.forEach { screen ->
                     BottomNavigationItem(
                         icon = { Icon(screen.icon, contentDescription = null) },
+                        label = { Text(stringResource(id = screen.navName)) },
                         selected = currentDestination?.route == screen.dest,
                         onClick = { // on navigation icon clicked
                             navController.navigate(screen.dest) { // switch to destination screen
@@ -104,19 +118,42 @@ private fun MainApp() {
                 }
             }
         },
+        // Context sensitive floating action button
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = {
+                    DogData.updateBreeds(
+                        onFail = {
+                            Log.e("DOG", "FAILED BREED UPDATE. MY GOD")
+                        },
+                        // Add all dogs info
+                        onUpdateDone = { breeds ->
+                            breeds.forEach {
+                                dogList.add(Dog(it, "Dog: $it"))
+                            }
+                        }
+                    )
+                }
+            ) {
+                Icon(Icons.Filled.ArrowCircleUp, contentDescription = null)
+            }
+//            when (navController.currentDestination?.route) {
+//                Screen.DogListScreen.dest -> {
+//                    FloatingActionButton(onClick = { DogData.updateBreeds() }) {
+//                        Image(Icons.Filled.ArrowCircleUp, contentDescription = null)
+//                    }
+//                }
+//                else -> {}
+//            }
+        },
     ) { innerPadding ->
         // Navigation host will now handle the 'drawing' of screens
         NavHost(navController = navController, startDestination = Screen.MainScreen.dest, modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.MainScreen.dest) { MainScreen(navController, onContinueClicked = {}) }
-            composable(Screen.DogListScreen.dest) { DogListScreen(navController) }
+            composable(Screen.DogListScreen.dest) { DogListScreen(navController, dogDataList = dogList) }
+            composable(Screen.DogViewScreen.dest) { DogViewScreen(navController) }
         }
-//        MainScreen(
-//            modifier = Modifier
-//                .padding(innerPadding)
-//                .fillMaxSize(),
-//            onContinueClicked = { }
-//        )
     }
 }
 
@@ -126,7 +163,7 @@ private fun MainApp() {
 @Composable
 private fun MainScreen(navcontroller: NavController?, modifier: Modifier = Modifier, onContinueClicked: () -> Unit) {
     Column (
-        modifier = modifier,
+        modifier = modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -146,9 +183,7 @@ private fun MainScreen(navcontroller: NavController?, modifier: Modifier = Modif
 private fun DogListScreen(
     navcontroller: NavController?,
     modifier: Modifier = Modifier,
-    dogDataList: List<Dog> = List(42) {
-        Dog("$it", "Dog #$it")
-    }
+    dogDataList: List<Dog>
 ) {
     LazyColumn (
         modifier = modifier.padding(vertical = 4.dp),
@@ -161,19 +196,123 @@ private fun DogListScreen(
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 private fun DogCard(dog: Dog, modifier: Modifier = Modifier) {
+    var imageSeed: Int by rememberSaveable { mutableStateOf(0) }
+    var active: Boolean by rememberSaveable { mutableStateOf(false) }
+    val dogNameResId = translateDogIdToStringRes(dog.id)
+    val dogName = if (dogNameResId == 0) dog.name else stringResource(dogNameResId)
     Card (
         backgroundColor = MaterialTheme.colors.primary,
         elevation = 4.dp,
-        modifier = modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier = modifier
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .animateContentSize(),
+        onClick = { active = !active },
     ) {
-        Row ( modifier = Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically ) {
-            // Dog image
-            Image(Icons.Filled.Pets, contentDescription = null, modifier = Modifier.size(64.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            // Dog name
-            Text(dog.name, modifier = Modifier.weight(0.9f), style = MaterialTheme.typography.h5.copy(fontWeight = FontWeight.Black))
+        Column {
+            Row ( modifier = Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically ) {
+                // Dog image
+                DogImage(dog.id, imageSeed, Modifier.size(64.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                // Dog name
+                Text(dogName, modifier = Modifier.weight(0.9f), style = MaterialTheme.typography.h5.copy(fontWeight = FontWeight.Black))
+            }
+            if (active) {
+                Spacer(modifier = Modifier.height(8.dp))
+                DogViewScreen(null, dog = dog, onImageReload = { imageSeed = (Math.random()*128).toInt() })
+            }
+        }
+    }
+}
+
+@Composable
+private fun DogImage(dogId: String?, seed: Int, modifier: Modifier = Modifier) {
+    var imgUrl by remember { mutableStateOf("https://picsum.photos/id/237/200") }
+    var imgExists by remember { mutableStateOf(false) }
+    val imgSeed = remember { mutableStateOf(-42) }
+    if (imgSeed.value != seed) { // changed seed, reset image
+        Log.e("DOG", "DogImage(): new seed $seed")
+        imgSeed.apply { value = seed }
+        imgExists = false
+
+        // Request for image URL
+        if (!LocalInspectionMode.current && dogId != null) {
+            val response = DogApi.api.getRandomBreedImageUrl(dogId)
+            response.enqueue(object: Callback<DogImageResponse> {
+                override fun onResponse(
+                    call: Call<DogImageResponse>,
+                    response: Response<DogImageResponse>
+                ) {
+                    if (response.isSuccessful() && response.body()!!.status == "success") { // HTTP Success
+                        // Update image URL
+                        imgUrl = response.body()!!.url
+                        imgExists = true
+                    } else { // HTTP Failed
+                        Log.e("DOG", "DogImage() API CALL FAILED! (failed response)")
+                    }
+                }
+                override fun onFailure(call: Call<DogImageResponse>, t: Throwable) {
+                    Log.e("DOG", "DogImage() API CALL FAILED!")
+                }
+            })
+        }
+    }
+
+    if (imgExists) {
+        val imageRequest = ImageRequest.Builder(LocalContext.current)
+            .data(imgUrl)
+            .crossfade(true)
+            .build()
+        AsyncImage(
+            model = imageRequest,
+            placeholder = rememberVectorPainter(image = Icons.Filled.Pets),
+            error = rememberVectorPainter(image = Icons.Filled.Warning),
+            contentDescription = null,
+            modifier = modifier  //.size(64.dp)
+        )
+    } else {
+        Icon(
+            Icons.Filled.Pets,
+            contentDescription = null,
+            modifier = modifier
+        )
+    }
+}
+
+/*
+    Dog view screen
+ */
+@Composable
+private fun DogViewScreen(
+    navcontroller: NavController?,
+    modifier: Modifier = Modifier,
+    dog: Dog? = null,
+    onImageReload: () -> Unit = {}
+) {
+    val dogName: String = dog?.name ?: "NONE"
+    val dogImg: Any = dog?.imgUrl ?: Icons.Filled.Pets
+
+    var imgSeed by remember { mutableStateOf(0) }
+
+    Column (modifier = Modifier
+        .height(200.dp)
+        .fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        DogImage(dog?.id, imgSeed,
+            Modifier
+                .weight(0.8f)
+                .fillMaxWidth())
+        OutlinedButton(
+            onClick = {
+                imgSeed = (Math.random()*128).toInt()
+                onImageReload()
+            },
+            modifier = Modifier
+                .weight(0.2f)
+                .fillMaxWidth()
+        ) {
+            Icon(Icons.Filled.ArrowDropDownCircle, contentDescription = null)
         }
     }
 }
@@ -192,6 +331,17 @@ fun DefaultPreview() {
 @Composable
 fun DogPreview() {
     ComposeBootcampTheme {
-        DogListScreen(null)
+        DogListScreen(null, dogDataList = List(42) {
+            Dog("$it", "Dog #$it")
+        })
+    }
+}
+
+@Preview(showBackground = true, widthDp = 320, heightDp = 320, uiMode = UI_MODE_NIGHT_YES, name = "DogViewPreviewDark")
+@Preview(showBackground = true, widthDp = 320, heightDp = 320)
+@Composable
+fun DogViewPreview() {
+    ComposeBootcampTheme {
+        DogViewScreen(null, dog = Dog("corgi", "Corgi"))
     }
 }
