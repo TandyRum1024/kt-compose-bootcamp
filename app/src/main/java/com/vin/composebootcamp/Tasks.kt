@@ -61,7 +61,7 @@ fun TaskCard(padding: PaddingValues = PaddingValues(0.dp), task: Task, viewModel
         modifier = Modifier
             .padding(horizontal = 0.dp, vertical = 4.dp)
             .animateContentSize(),
-        onClick = { isActive = !isActive }
+        onClick = { isActive = !isActive; viewModel.fetchTask(task.id) }
     ) {
         Column {
             Row (horizontalArrangement = Arrangement.SpaceBetween) {
@@ -80,10 +80,15 @@ fun TaskCard(padding: PaddingValues = PaddingValues(0.dp), task: Task, viewModel
                     Text(text = "Added on ${SimpleDateFormat("yy/MM/dd").format(Date(task.dateAdded))}")
                 }
             }
-            // Description
+            // Description & Edit button
             if (isActive) {
                 Surface (color = MaterialTheme.colors.background, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = task.desc, style = TextStyle(fontWeight = FontWeight.Black), modifier = Modifier.padding(8.dp))
+                    Column {
+                        Text(text = task.desc, style = TextStyle(fontWeight = FontWeight.Black), modifier = Modifier.padding(8.dp))
+                        Button(onClick = { viewModel.dialogueState = Dialogue.MODIFY_TASK }) {
+                            Text(text = "EDIT")
+                        }
+                    }
                 }
             }
         }
@@ -94,11 +99,15 @@ fun TaskCard(padding: PaddingValues = PaddingValues(0.dp), task: Task, viewModel
 fun AddTaskFAB(viewModel: TasksViewModel) {
     FloatingActionButton(
         onClick = {
-            viewModel.showAddTaskDialogue = true
+            viewModel.dialogueState = Dialogue.ADD_TASK
         }
     ) {
         Icon(Icons.Filled.Add, contentDescription = null)
     }
+}
+
+enum class Dialogue {
+    NONE, ADD_TASK, MODIFY_TASK
 }
 
 @Composable
@@ -111,14 +120,14 @@ fun AddTaskDialogue(viewModel: TasksViewModel) {
     var currentTime = Date().time
 
     AlertDialog(
-        onDismissRequest = { viewModel.showAddTaskDialogue = false },
+        onDismissRequest = { viewModel.dialogueState = Dialogue.NONE },
         confirmButton = {
             TextButton(
                 onClick = {
                     if (!title.isEmpty() && !desc.isEmpty()) {
                         val newTask = Task(0, title, desc, false, currentTime, currentTime)
                         viewModel.addTask(newTask)
-                        viewModel.showAddTaskDialogue = false
+                        viewModel.dialogueState = Dialogue.NONE
                     }
                     else {
                         titleError = title.isEmpty()
@@ -130,7 +139,7 @@ fun AddTaskDialogue(viewModel: TasksViewModel) {
             }
         },
         dismissButton = {
-            TextButton( onClick = { viewModel.showAddTaskDialogue = false } ) {
+            TextButton( onClick = { viewModel.dialogueState = Dialogue.NONE } ) {
                 Text("CANCEL")
             }
         },
@@ -144,6 +153,66 @@ fun AddTaskDialogue(viewModel: TasksViewModel) {
                 // Title field
                 TextField(value = title, onValueChange = {title = it}, isError = titleError, placeholder = {
                     Text("New task", style = TextStyle(fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold))
+                })
+
+                Spacer(modifier = Modifier.size(width = 0.dp, height = 4.dp))
+
+                // Description field
+                TextField(value = desc, onValueChange = {desc = it}, isError = descError, placeholder = {
+                    Text("Enter description here...", style = TextStyle(fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold))
+                })
+            }
+        }
+    )
+}
+
+@Composable
+fun SetTaskDialogue(viewModel: TasksViewModel, currentTask: Task) {
+    // Temp. variable
+    var title by remember { mutableStateOf(currentTask.title) }
+    var titleError by remember { mutableStateOf(false) }
+    var desc by remember { mutableStateOf(currentTask.desc) }
+    var descError by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { viewModel.dialogueState = Dialogue.NONE },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (!title.isEmpty() && !desc.isEmpty()) {
+                        val newTask = currentTask.copy(title=title, desc=desc)
+                        viewModel.updateTask(newTask)
+                        viewModel.dialogueState = Dialogue.NONE
+                    }
+                    else {
+                        titleError = title.isEmpty()
+                        descError = desc.isEmpty()
+                    }
+                }
+            ) {
+                Text("EDIT")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton( onClick = { viewModel.dialogueState = Dialogue.NONE } ) {
+                    Text("CANCEL")
+                }
+                TextButton( onClick = { viewModel.dialogueState = Dialogue.NONE; viewModel.deleteTask(currentTask) } ) {
+                    Text("DELETE", style = TextStyle(color = Color.Red))
+                }
+            }
+        },
+        title = { Text("Edit Task") },
+        text = {
+            Column (modifier = Modifier.padding(4.dp)) {
+                Text("Task was created on: ${SimpleDateFormat("yy/MM/dd HH:mm:ss").format(Date(currentTask.dateAdded))}")
+
+                Spacer(modifier = Modifier.size(width = 0.dp, height = 8.dp))
+
+                // Title field
+                TextField(value = title, onValueChange = {title = it}, isError = titleError, placeholder = {
+                    Text("Task title", style = TextStyle(fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold))
                 })
 
                 Spacer(modifier = Modifier.size(width = 0.dp, height = 4.dp))

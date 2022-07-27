@@ -7,9 +7,8 @@ import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Circle
@@ -18,9 +17,15 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextGeometricTransform
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -107,12 +112,24 @@ private fun SplashScreen(
         }
     }
 
-    Column (
+    Surface (
         modifier = modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        color = MaterialTheme.colors.primary,
+//        horizontalAlignment = Alignment.CenterHorizontally,
+//        verticalArrangement = Arrangement.Center,
     ) {
-        Text(stringResource(R.string.menu_greetings))
+            Text(
+                text = "TASK\nWRAN\nGLER",
+                style = MaterialTheme.typography.h2.copy(fontWeight = FontWeight(1000), color = Color.Black, textGeometricTransform = TextGeometricTransform(skewX = 0.75f)),
+                modifier = Modifier.rotate(-45f).fillMaxSize().wrapContentHeight(),
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "TASK\nWRAN\nGLER",
+                style = MaterialTheme.typography.h2.copy(fontWeight = FontWeight(1000), color = Color.White),
+                modifier = Modifier.rotate(-45f).fillMaxSize().wrapContentHeight(),
+                textAlign = TextAlign.Center
+            )
     }
 }
 
@@ -125,7 +142,6 @@ private fun ListScreen(
     viewModel: TasksViewModel,
     onTaskAddButton: () -> Unit = {}
 ) {
-    val showDialogue = viewModel.showAddTaskDialogue
     LaunchedEffect(Unit) {
         Log.e("YEAH", "FEATCHING ALL TASKS...")
         viewModel.fetchAllTasks()
@@ -138,8 +154,10 @@ private fun ListScreen(
         TasksList(padding = innerPadding, viewModel)
     }
     // Dialogue
-    if (showDialogue) {
-        AddTaskDialogue(viewModel = viewModel)
+    when (viewModel.dialogueState) {
+        Dialogue.NONE -> {}
+        Dialogue.ADD_TASK -> { AddTaskDialogue(viewModel = viewModel) }
+        Dialogue.MODIFY_TASK -> { SetTaskDialogue(viewModel = viewModel, currentTask = viewModel.task) }
     }
 }
 

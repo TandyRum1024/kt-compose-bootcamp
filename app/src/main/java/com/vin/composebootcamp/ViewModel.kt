@@ -22,6 +22,7 @@ import kotlin.math.min
 // Test / Faux viewmodel for Previews
 class TestViewModel: TasksViewModel(TaskRepoDummy()) {
     override fun addTask(task: Task) {  }
+    override fun deleteTask(task: Task) {  }
     override fun updateTask(task: Task) {  }
     override fun fetchTask(id: Int) {
         task = Task(id, "Task #${(Math.random() * 12).toInt()}", "Lorem ipsum holy crap", Math.random() >= 0.5f, Date().time + (Math.random() * 4096).toInt(), Date().time + (Math.random() * 4096).toInt())
@@ -37,7 +38,8 @@ class TestViewModel: TasksViewModel(TaskRepoDummy()) {
 open class TasksViewModel (private val repo: TaskRepoInterface) : ViewModel() {
     // App state
     var isSplashDone: Boolean by mutableStateOf(false)
-    var showAddTaskDialogue: Boolean by mutableStateOf(false)
+    //var showAddTaskDialogue: Boolean by mutableStateOf(false)
+    var dialogueState: Dialogue by mutableStateOf(Dialogue.NONE)
 
     // DB (live) data
     var tasks by mutableStateOf(emptyList<Task>())
@@ -49,6 +51,11 @@ open class TasksViewModel (private val repo: TaskRepoInterface) : ViewModel() {
             repo.addTask(task)
         }
     }
+    open fun deleteTask(task: Task) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repo.deleteTask(task)
+        }
+    }
     open fun updateTask(task: Task){
         viewModelScope.launch(Dispatchers.IO) {
             repo.updateTask(task)
@@ -57,7 +64,10 @@ open class TasksViewModel (private val repo: TaskRepoInterface) : ViewModel() {
     open fun fetchTask(id: Int) {
         viewModelScope.launch(Dispatchers.IO) {
             repo.getTask(id).collectLatest { // collect from Flow<Task>
-                task = it
+                if (it != null)
+                    task = it
+                else // Back to default task
+                    task  = Task(0, "", "", false, Date().time, Date().time)
             }
         }
     }
@@ -102,7 +112,7 @@ open class TasksViewModel (private val repo: TaskRepoInterface) : ViewModel() {
                 }
                 tasks = result
             }
-             */
+            */
         }
     }
 }
